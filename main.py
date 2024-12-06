@@ -18,7 +18,6 @@ class RiotAPI:
         }
 
     def get_account_by_riot_id(self, game_name: str, tag_line: str) -> Optional[Dict]:
-        # Pobieramy dane dane o koncie na podstawie nicku i tagu
         regions = ["europe", "americas", "asia", "sea"]
         
         for region in regions:
@@ -27,20 +26,43 @@ class RiotAPI:
                 response = requests.get(url, headers=self.headers)
                 if response.status_code == 200:
                     return response.json()
+                elif response.status_code == 404:
+                    continue
+                else:
+                    print(f"Error {response.status_code} for region {region}: {response.text}")
             except Exception as e:
-                print(f"Błąd podczas pobierania danych konta: {e}")
+                print(f"Error for region {region}: {e}")
                 continue
         return None
 
-    def get_summoner_by_puuid(self, puuid: str) -> Optional[Dict]:
-        # Następnie na podstawie Puuid
-        regions = ["eun1", "euw1", "na1", "kr", "br1", "jp1", "la1", "la2", "oc1", "tr1", "ru"]
+    def get_summoner_by_puuid(self, puuid: str, server: str) -> Optional[Dict]:
+        region_mapping = {
+            "europe": "eun1",
+            "americas": "na1",
+            "asia": "kr",
+            "sea": "oc1"
+        }
         
-        for region in regions:
-            url = f"https://{region}.api.riotgames.com/lol/summoner/v4/summoners/by-puuid/{puuid}"
+        # Sprawdzamy czy server jest w wartościach region_mapping
+        server_to_use = None
+        for region, mapped_server in region_mapping.items():
+            if server == region:
+                server_to_use = mapped_server
+                break
+        
+        if not server_to_use:
+            server_to_use = server  # jeśli nie znaleziono w mapowaniu, użyj oryginalnego
+            
+        url = f"https://{server_to_use}.api.riotgames.com/lol/summoner/v4/summoners/by-puuid/{puuid}"
+        try:
             response = requests.get(url, headers=self.headers)
             if response.status_code == 200:
                 return response.json()
+            else:
+                print(f"Error {response.status_code} getting summoner: {response.text}")
+        except Exception as e:
+            print(f"Error getting summoner data: {e}")
+            return None
         return None
 
     def get_ranked_stats(self, summoner_id: str) -> Optional[List[Dict]]:
@@ -75,29 +97,33 @@ class RiotAPI:
             return response.json()
         return None
 
-    def get_player_data(self, riot_id: str) -> Dict: # Dict klucz-wartość
-        # Funkcja używająca poprzednich
+    def get_player_data(self, riot_id: str, server: str) -> Dict:
         try:
-            if '#' in riot_id:
-                game_name, tag_line = riot_id.split('#')
-            else:
-                game_name = riot_id
-                tag_line = 'EUW'
+            if '#' not in riot_id:
+                raise ValueError("Nazwa gracza musi zawierać '#' (np. nazwa#tag)")
 
+            game_name, tag_line = riot_id.split('#')
+            if not game_name or not tag_line:
+                raise ValueError("Nieprawidłowy format nazwy gracza")
+
+            print(f"Szukam gracza: {game_name}#{tag_line} na serwerze {server}")
+            
             account_data = self.get_account_by_riot_id(game_name, tag_line)
             if not account_data:
-                return None
+                raise ValueError(f"Nie znaleziono konta dla {game_name}#{tag_line}")
 
             puuid = account_data.get('puuid')
             if not puuid:
-                return None
+                raise ValueError("Nie znaleziono PUUID w danych konta")
 
-            summoner_data = self.get_summoner_by_puuid(puuid)
+            summoner_data = self.get_summoner_by_puuid(puuid, server)
+            if not summoner_data:
+                raise ValueError(f"Nie znaleziono danych przywoływacza na serwerze {server}")
+
             matches_data = self.get_match_history_details(puuid)
             ranked_stats = self.get_ranked_stats(summoner_data.get('id')) if summoner_data else None
             champion_mastery = self.get_champion_mastery(puuid)
 
-            # Przedtwarzamy dane, przypisujemy je do tabel i zmiennych
             if summoner_data:
                 summoner_data['gameName'] = account_data.get('gameName')
                 summoner_data['tagLine'] = account_data.get('tagLine')
@@ -112,9 +138,12 @@ class RiotAPI:
                 "champion_mastery": champion_mastery or []
             }
 
+        except ValueError as ve:
+            print(f"Błąd walidacji: {str(ve)}")
+            raise
         except Exception as e:
-            print(f"Błąd podczas pobierania danych gracza: {e}")
-            return None
+            print(f"Nieoczekiwany błąd: {str(e)}")
+            raise
 
     def get_match_history_details(self, puuid: str) -> List[Dict]:
         # Potem mecze do tabeli
@@ -138,7 +167,7 @@ class RiotAPI:
         top_champions = self.calculate_champion_stats(matches_data, summoner_data.get('puuid', ''))
 
         return {
-            'name': summoner_data.get('gameName', summoner_data.get('name', 'Unknown')),
+            'name': f"{summoner_data.get('gameName', summoner_data.get('name', 'Unknown'))}#{summoner_data.get('tagLine', 'Unknown')}",
             'level': summoner_data.get('summonerLevel', 0),
             'icon_id': summoner_data.get('profileIconId', 1),
             'avg_stats': avg_stats,
@@ -221,7 +250,7 @@ class RiotAPI:
                 if not player_data:
                     continue
                 
-                champion_name = player_data['championName']
+                champion_name = player_data.get('championName')
                 if champion_name not in champion_stats:
                     champion_stats[champion_name] = {
                         'games': 0,
@@ -384,7 +413,7 @@ def update_match_history(matches_data, puuid):
                 champion_frame = ttk.Frame(match_frame)
                 champion_frame.grid(row=0, column=0, padx=(5,0), pady=5)
 
-                champion_name = player_data.get('championName', 'Unknown')
+                champion_name = player_data.get('championName')
                 champion_icon = load_champion_icon(champion_name)
                 if champion_icon:
                     champ_label = ttk.Label(champion_frame, image=champion_icon)
@@ -595,6 +624,7 @@ def show_loading_window():
 
 def search_player():
     riot_id = search_entry.get()
+    server = server_combobox.get()
     if not riot_id:
         show_error_message("Wprowadź nazwę gracza w formacie: nazwa#tag")
         return
@@ -610,7 +640,7 @@ def search_player():
             riot_api = RiotAPI(api_key)
  
             root.after(0, lambda: update_status("Pobieranie danych gracza..."))
-            player_data = riot_api.get_player_data(riot_id)
+            player_data = riot_api.get_player_data(riot_id, server)
             
             if player_data:
                 root.after(0, lambda: update_status("Aktualizacja interfejsu..."))
@@ -625,7 +655,6 @@ def search_player():
             root.after(0, lambda: show_error_message(f"Wystąpił błąd: {str(e)}"))
             print(f"Szczegóły błędu: {type(e).__name__}")
     
-    # Tak jak Pan chciał użycie osobnych wątków aby nie lagowac apki// JUZ Wiem że nie o to chodzło ale zostawiłem
     thread = threading.Thread(target=search_thread)
     thread.daemon = True
     thread.start()
@@ -637,7 +666,7 @@ def get_current_lol_version():
         response.raise_for_status()
         versions = response.json()
         current_version = versions[0] 
-        major, minor = current_version.split('.')[:2]  # bo zwracało sieczkę 
+        major, minor = current_version.split('.')[:2]  # aby wybrać tylko major i minor
         return major, minor
     except Exception as e:
         print(f"Błąd podczas pobierania wersji: {e}")
@@ -647,6 +676,11 @@ def open_patch_notes():
     major, minor = get_current_lol_version()
     url = f"https://www.leagueoflegends.com/pl-pl/news/game-updates/patch-{major}-{minor}-notes/"
     webbrowser.open(url)
+
+def minimize_window(event=None):
+    root.overrideredirect(False)  # Temporarily disable overrideredirect
+    root.iconify()
+    root.bind('<Map>', lambda e: root.overrideredirect(True))  # Re-enable overrideredirect when window is restored
 
 # Koniec funkcji
 # Początek Tkinter
@@ -667,9 +701,13 @@ style.configure("SearchedPlayerStats.TLabel",
                font=("Helvetica", 10),
                foreground="#00ff99")
 
+style.configure("MinimalizeHint.TLabel", 
+               font=("Helvetica", 9),
+               foreground="#1a1a1a")
+
 navbar = ttk.Frame(root, style="secondary.TFrame", cursor="hand2")
 navbar.pack(side=TOP, fill=X)
-
+navbar.bind('<Double-Button-1>', minimize_window)
 navbar.bind("<Button-1>", saveLastClick)
 navbar.bind("<B1-Motion>", drag)
 
@@ -681,6 +719,9 @@ nav_title.place(relx=0.5, rely=0.5, anchor="center")
 
 about_btn = ttk.Button(navbar, text="X", style="secondary.Outline.TButton", command=zamknij_okno)
 about_btn.pack(side=RIGHT, padx=5, pady=5)
+
+minimize_hint = ttk.Label(navbar, text="2Click to minimalize", style="MinimalizeHint.TLabel", background="#444")
+minimize_hint.pack(side=RIGHT, padx=(0, 10), pady=5)
 
 top_section = ttk.Frame(root)
 top_section.pack(fill=X, padx=20, pady=10)
@@ -713,6 +754,10 @@ search_frame.pack(side=RIGHT, fill=X, padx=20, pady=20, anchor=E)
 search_label = ttk.Label(search_frame, text="Wyszukaj gracza")
 search_label.pack(pady=(0, 5))
 
+server_combobox = ttk.Combobox(search_frame, values=["europe", "americas", "asia", "sea"], state="readonly", width=10)
+server_combobox.set("europe")
+server_combobox.pack(side=LEFT, padx=5)
+
 search_entry = ttk.Entry(search_frame, width=40)
 search_entry.pack(side=LEFT, padx=5)
 
@@ -739,56 +784,56 @@ ttk.Label(kda_frame, text="KDA", font=("Helvetica", 12, "bold"), background="#44
 kda_value = ttk.Label(kda_frame, text="0/0/0", background="#444")
 kda_value.pack(side=RIGHT)
 
-cs_frame = ttk.Frame(stats_panel)
+cs_frame = ttk.Frame(stats_panel, style="secondary.TFrame")
 cs_frame.pack(fill=X, padx=10, pady=5)
-ttk.Label(cs_frame, text="CS/min", font=("Helvetica", 12, "bold")).pack(side=LEFT)
-cs_value = ttk.Label(cs_frame, text="0")
+ttk.Label(cs_frame, text="CS/min", font=("Helvetica", 12, "bold"), background="#444").pack(side=LEFT)
+cs_value = ttk.Label(cs_frame, text="0", background="#444")
 cs_value.pack(side=RIGHT)
 
-dpm_frame = ttk.Frame(stats_panel)
+dpm_frame = ttk.Frame(stats_panel, style="secondary.TFrame")
 dpm_frame.pack(fill=X, padx=10, pady=5)
-ttk.Label(dpm_frame, text="DPM", font=("Helvetica", 12, "bold")).pack(side=LEFT)
-dpm_value = ttk.Label(dpm_frame, text="0")
+ttk.Label(dpm_frame, text="DPM", font=("Helvetica", 12, "bold"), background="#444").pack(side=LEFT)
+dpm_value = ttk.Label(dpm_frame, text="0", background="#444")
 dpm_value.pack(side=RIGHT)
 
-ward_frame = ttk.Frame(stats_panel)
+ward_frame = ttk.Frame(stats_panel, style="secondary.TFrame")
 ward_frame.pack(fill=X, padx=10, pady=5)
-ttk.Label(ward_frame, text="Vision", font=("Helvetica", 12, "bold")).pack(side=LEFT)
-ward_value = ttk.Label(ward_frame, text="0")
+ttk.Label(ward_frame, text="Vision", font=("Helvetica", 12, "bold"), background="#444").pack(side=LEFT)
+ward_value = ttk.Label(ward_frame, text="0", background="#444")
 ward_value.pack(side=RIGHT)
 
-games_frame = ttk.Frame(stats_panel)
+games_frame = ttk.Frame(stats_panel, style="secondary.TFrame")
 games_frame.pack(fill=X, padx=10, pady=5)
-ttk.Label(games_frame, text="W/L", font=("Helvetica", 12, "bold")).pack(side=LEFT)
-games_label = ttk.Label(games_frame, text="0/0 (0%)")
+ttk.Label(games_frame, text="W/L", font=("Helvetica", 12, "bold"), background="#444").pack(side=LEFT)
+games_label = ttk.Label(games_frame, text="0/0 (0%)", background="#444")
 games_label.pack(side=RIGHT)
 
 top_champs_panel = ttk.Frame(left_block, style="secondary.TFrame")
 top_champs_panel.pack(fill=X, padx=5, pady=5)
 
-ttk.Label(top_champs_panel, text="TOP 5 Championów", font=("Helvetica", 14, "bold")).pack(pady=5)
+ttk.Label(top_champs_panel, text="TOP 5 Championów", font=("Helvetica", 14, "bold"), background="#444").pack(pady=5)
 
-top_champs_container = ttk.Frame(top_champs_panel)
+top_champs_container = ttk.Frame(top_champs_panel, style="secondary.TFrame")
 top_champs_container.pack(fill=X, padx=5, pady=5)
 
 # Petla dla twrozenia 5 ramek
 for i in range(5):
     champ_frame = ttk.Frame(top_champs_container, style="secondary.TFrame")
     champ_frame.pack(fill=X, pady=2)
-    champ_icon_frame = ttk.Frame(champ_frame, width=40, height=40)
+    champ_icon_frame = ttk.Frame(champ_frame, width=40, height=40, style="secondary.TFrame")
     champ_icon_frame.pack(side=LEFT, padx=5, pady=5)
     champ_icon_frame.pack_propagate(False)
     
-    champ_icon_label = ttk.Label(champ_icon_frame)
+    champ_icon_label = ttk.Label(champ_icon_frame, style="secondary.Label")
     champ_icon_label.pack(fill=BOTH, expand=True)
     
-    champ_info_frame = ttk.Frame(champ_frame)
+    champ_info_frame = ttk.Frame(champ_frame, style="secondary.TFrame")
     champ_info_frame.pack(side=LEFT, fill=X, expand=True, padx=5)
     
-    champ_name_label = ttk.Label(champ_info_frame, text="", font=("Helvetica", 10, "bold"))
+    champ_name_label = ttk.Label(champ_info_frame, text="", font=("Helvetica", 10, "bold"), background="#444")
     champ_name_label.pack(side=LEFT)
     
-    champ_stats_label = ttk.Label(champ_info_frame, text="")
+    champ_stats_label = ttk.Label(champ_info_frame, text="", background="#444")
     champ_stats_label.pack(side=RIGHT)
 
 match_history_block = ttk.Frame(bottom_section)
@@ -825,27 +870,32 @@ right_block.pack(side=RIGHT, fill=BOTH, expand=True, padx=(10, 0))
 rank_panel = ttk.Frame(right_block, style="secondary.TFrame")
 rank_panel.pack(fill=BOTH, expand=True, pady=(0, 10))
 
-rank_icon_frame = ttk.Frame(rank_panel, width=128, height=128)
-rank_icon_frame.pack(pady=10)
-rank_icon_frame.pack_propagate(False)
+rank_content = ttk.Frame(rank_panel, style="secondary.TFrame")
+rank_content.pack(expand=True)
 
-rank_icon_label = ttk.Label(rank_icon_frame)
+rank_icon_frame = ttk.Frame(rank_content, width=128, height=128, style="secondary.TFrame")
+rank_icon_frame.pack(pady=10)
+
+rank_icon_label = ttk.Label(rank_icon_frame, background="#444")
 rank_icon_label.pack(fill=BOTH, expand=True)
 
-rank_name = ttk.Label(rank_panel, text="Unranked", background="#444", font=("Helvetica", 16, "bold"))
+rank_name = ttk.Label(rank_content, text="Unranked", background="#444", font=("Helvetica", 16, "bold"))
 rank_name.pack()
 
-winrate_label = ttk.Label(rank_panel, text="Winrate: 0%", background="#444")
+winrate_label = ttk.Label(rank_content, text="Winrate: 0%", background="#444")
 winrate_label.pack()
 
 lp_panel = ttk.Frame(right_block, style="secondary.TFrame")
 lp_panel.pack(fill=BOTH, expand=True)
 
-lp_label = ttk.Label(lp_panel, text="LP", font=("Helvetica", 14, "bold"), background="#444")
-lp_label.pack(pady=5)
+lp_content = ttk.Frame(lp_panel, style="secondary.TFrame")
+lp_content.pack(expand=True)
 
-lp_value = ttk.Label(lp_panel, text="0", font=("Helvetica", 24, "bold"), background="#444")
-lp_value.pack(pady=5)
+lp_label = ttk.Label(lp_content, text="LP", font=("Helvetica", 14, "bold"), background="#444")
+lp_label.pack()
+
+lp_value = ttk.Label(lp_content, text="0", font=("Helvetica", 20, "bold"), background="#444")
+lp_value.pack()
 
 lastClickX, lastClickY = 0, 0
 
