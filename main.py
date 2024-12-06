@@ -44,7 +44,7 @@ class RiotAPI:
         return None
 
     def get_ranked_stats(self, summoner_id: str) -> Optional[List[Dict]]:
-        # Natepnie statystyki rankingowe
+        # Nastepnie statystyki rankingowe
         url = f"https://eun1.api.riotgames.com/lol/league/v4/entries/by-summoner/{summoner_id}"
         response = requests.get(url, headers=self.headers)
         if response.status_code == 200:
@@ -731,12 +731,12 @@ left_block.pack(side=LEFT, fill=BOTH, expand=True, padx=(0, 10))
 stats_panel = ttk.Frame(left_block, style="secondary.TFrame")
 stats_panel.pack(fill=X, padx=5, pady=5)
 
-ttk.Label(stats_panel, text="Statystyki", font=("Helvetica", 14, "bold")).pack(pady=5)
+ttk.Label(stats_panel, text="Statystyki", background="#444", font=("Helvetica", 14, "bold")).pack(pady=5)
 
-kda_frame = ttk.Frame(stats_panel)
+kda_frame = ttk.Frame(stats_panel, style="secondary.TFrame")
 kda_frame.pack(fill=X, padx=10, pady=5)
-ttk.Label(kda_frame, text="KDA", font=("Helvetica", 12, "bold")).pack(side=LEFT)
-kda_value = ttk.Label(kda_frame, text="0/0/0")
+ttk.Label(kda_frame, text="KDA", font=("Helvetica", 12, "bold"), background="#444").pack(side=LEFT)
+kda_value = ttk.Label(kda_frame, text="0/0/0", background="#444")
 kda_value.pack(side=RIGHT)
 
 cs_frame = ttk.Frame(stats_panel)
@@ -832,19 +832,19 @@ rank_icon_frame.pack_propagate(False)
 rank_icon_label = ttk.Label(rank_icon_frame)
 rank_icon_label.pack(fill=BOTH, expand=True)
 
-rank_name = ttk.Label(rank_panel, text="Unranked", font=("Helvetica", 16, "bold"))
+rank_name = ttk.Label(rank_panel, text="Unranked", background="#444", font=("Helvetica", 16, "bold"))
 rank_name.pack()
 
-winrate_label = ttk.Label(rank_panel, text="Winrate: 0%")
+winrate_label = ttk.Label(rank_panel, text="Winrate: 0%", background="#444")
 winrate_label.pack()
 
 lp_panel = ttk.Frame(right_block, style="secondary.TFrame")
 lp_panel.pack(fill=BOTH, expand=True)
 
-lp_label = ttk.Label(lp_panel, text="LP", font=("Helvetica", 14, "bold"))
+lp_label = ttk.Label(lp_panel, text="LP", font=("Helvetica", 14, "bold"), background="#444")
 lp_label.pack(pady=5)
 
-lp_value = ttk.Label(lp_panel, text="0", font=("Helvetica", 24, "bold"))
+lp_value = ttk.Label(lp_panel, text="0", font=("Helvetica", 24, "bold"), background="#444")
 lp_value.pack(pady=5)
 
 lastClickX, lastClickY = 0, 0
