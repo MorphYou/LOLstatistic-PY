@@ -49,9 +49,6 @@ class RiotAPI:
             if server == region:
                 server_to_use = mapped_server
                 break
-        
-        if not server_to_use:
-            server_to_use = server  # jeśli nie znaleziono w mapowaniu, użyj oryginalnego
             
         url = f"https://{server_to_use}.api.riotgames.com/lol/summoner/v4/summoners/by-puuid/{puuid}"
         try:
@@ -486,7 +483,6 @@ def update_match_history(matches_data, puuid):
                 print(f"Błąd podczas aktualizacji meczu: {e}")
                 continue
 
-        # Tu też coś mi psuło
         match_canvas.update_idletasks()
         match_canvas.configure(scrollregion=match_canvas.bbox("all"))
 
@@ -599,7 +595,7 @@ def show_loading_window():
     loading_window.title("Ładowanie")
     loading_window.geometry("300x150")
     loading_window.transient(root)  # i tu taki zindex
-    loading_window.grab_set()  # unterakcja niet
+    loading_window.grab_set()  # interakcja niet
 
     loading_window.geometry("+%d+%d" % (
         root.winfo_x() + (root.winfo_width() // 2 - 150),
@@ -636,7 +632,7 @@ def search_player():
     
     def search_thread():
         try:
-            api_key = "RGAPI-12f215ca-df2e-400a-a574-89b5b22103c3"  # API
+            api_key = "RGAPI-bc597f8f-ca19-4629-a516-5ea4f2352ce0"  # API
             riot_api = RiotAPI(api_key)
  
             root.after(0, lambda: update_status("Pobieranie danych gracza..."))
@@ -678,9 +674,9 @@ def open_patch_notes():
     webbrowser.open(url)
 
 def minimize_window(event=None):
-    root.overrideredirect(False)  # Temporarily disable overrideredirect
+    root.overrideredirect(False)
     root.iconify()
-    root.bind('<Map>', lambda e: root.overrideredirect(True))  # Re-enable overrideredirect when window is restored
+    root.bind('<Map>', lambda e: root.overrideredirect(True))
 
 # Koniec funkcji
 # Początek Tkinter
