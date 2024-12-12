@@ -632,7 +632,7 @@ def search_player():
     
     def search_thread():
         try:
-            api_key = "RGAPI-bc597f8f-ca19-4629-a516-5ea4f2352ce0"  # API
+            api_key = "RGAPI-b3730e0c-6304-4b6d-afd6-cf16384f1b5d"  # API
             riot_api = RiotAPI(api_key)
  
             root.after(0, lambda: update_status("Pobieranie danych gracza..."))
